@@ -1,0 +1,9 @@
+services:
+  # Place here the default dependency injection configuration
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: true
+
+  Brinkert\Cbgooglemaps\:
+    resource: '../Classes/*'
