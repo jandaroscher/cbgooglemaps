@@ -2,6 +2,15 @@
 
 namespace Brinkert\Cbgooglemaps\Controller;
 
+use Symfony\Component\Routing\RequestContext;
+use TYPO3\CMS\Core\Http\Request;
+use TYPO3\CMS\Extbase\Configuration\ConfigurationManager;
+use TYPO3\CMS\Extbase\Mvc\Controller\ActionController;
+use TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface;
+use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
+use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
+use Psr\Http\Message\ResponseInterface;
 use TYPO3\CMS\Core\Core\Environment;
 
 /**
@@ -12,7 +21,7 @@ use TYPO3\CMS\Core\Core\Environment;
  * @copyright           (c)2011-2020 Christian Brinkert / Tobi
  * @author              Christian Brinkert <christian.brinkert@googlemail.com>
  */
-class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
+class MapController extends ActionController
 {
 
     protected $ceData;
@@ -24,14 +33,23 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
     /**
      * Do some global initialization
      */
-    public function initializeAction()
+    public function initializeAction(): void
     {
         // store content element data to local property
-        $this->ceData = $this->configurationManager->getContentObject()->data;
+        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
+        $configurationManager = GeneralUtility::makeInstance(ConfigurationManager::class);
+
+        // Check if the currentContentObject is available
+        $contentObject = $contentObjectRenderer->data;
+        if (is_array($contentObject) && isset($contentObject['data'])) {
+            $this->ceData = $contentObject['data'];
+        } elseif (is_object($contentObject) && property_exists($contentObject, 'data')) {
+            $this->ceData = $contentObject->data;
+        }
 
         // get extension typoscript
-        $this->settings = $this->configurationManager->getConfiguration(
-            \TYPO3\CMS\Extbase\Configuration\ConfigurationManagerInterface::CONFIGURATION_TYPE_SETTINGS,
+        $this->settings = $configurationManager->getConfiguration(
+            ConfigurationManagerInterface::CONFIGURATION_TYPE_SETTINGS,
             'Cbgooglemaps',
             'Quickgooglemap');
 
@@ -42,15 +60,15 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
         $this->filePath = $baseUri . '/typo3conf/ext/cbgooglemaps/';
 
         // set content object renderer
-        $this->cobj = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(
-            'TYPO3\\CMS\\Frontend\\ContentObject\\ContentObjectRenderer');
+        $this->cobj = GeneralUtility::makeInstance(
+            ContentObjectRenderer::class);
     }
 
 
     /**
      * Create map content element to the frontend
      */
-    public function indexAction()
+    public function indexAction(): ResponseInterface
     {
         // add google or openstreetmap scripts/styles
         $this->addJsCss();
@@ -63,6 +81,7 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
 
         // assign map parameters to the view
         $this->view->assignMultiple($mapParameter);
+        return $this->htmlResponse();
     }
 
 
@@ -72,56 +91,46 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
      */
     private function getMapParameters()
     {
+        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
+        $contentObject = $contentObjectRenderer->data;
 
         return [
             // assign uid of current content element
             'contentId' => ((
-                null != $this->ceData['uid']
-                    ? $this->ceData['uid']
-                    : rand(1, 999999)
-                ) . '_' . $this->configurationManager->getContentObject()->parentRecord['data']['uid']),
+                    $this->ceData['uid'] ?? rand(1, 999999)
+                ) . '_' . isset($contentObject->parentRecord['data']['uid'])),
             // map provider to build map: googleMaps or OpenStreetMap
             'mapProvider' => $this->settings['mapProvider'],
             // assign width and height of map
-            'width' => null != $this->ceData['width']
-                ? $this->ceData['width']
-                : (
+            'width' => $this->ceData['width'] ?? (
                 0 < (int)$this->settings['cbgmMapWidth']
                     ? $this->settings['cbgmMapWidth']
                     : $this->settings['display']['width']
                 ),
-            'height' => null != $this->ceData['height']
-                ? $this->ceData['height']
-                : (
+            'height' => $this->ceData['height'] ?? (
                 0 < (int)$this->settings['cbgmMapHeight']
                     ? $this->settings['cbgmMapHeight']
                     : $this->settings['display']['height']
                 ),
             // assign pin description text, to placed into info box
             'infoText' => urlencode(
-                null != $this->ceData['infoText']
-                    ? $this->ceData['infoText']
-                    : (
-                isset($this->settings['cbgmDescription'])
-                    ? $this->settings['cbgmDescription']
-                    : $this->settings['infoText']
-                )
+                (string) ($this->ceData['infoText'] ?? (
+                    $this->settings['cbgmDescription'] ?? $this->settings['infoText']
+                ))
             ),
             // assign auto open flag to the view
-            'openInfoBox' => isset($this->settings['cbgmAutoOpen'])
-                ? $this->settings['cbgmAutoOpen']
-                : $this->settings['infoTextOpen'],
+            'openInfoBox' => $this->settings['cbgmAutoOpen'] ?? $this->settings['infoTextOpen'],
             // assign deactivation of zooming by mousewheel
             'useScrollwheel' => $this->settings['options']['useScrollwheel'],
             // assign location (longitude and latitude) to the view
-            'latitude' => null != $this->ceData['latitude']
+            'latitude' => isset($this->ceData['latitude'])
                 ? (float)$this->ceData['latitude']
                 : (
                 isset($this->settings['cbgmLatitude'])
                     ? (float)$this->settings['cbgmLatitude']
                     : (float)$this->settings['latitude']
                 ),
-            'longitude' => null != $this->ceData['longitude']
+            'longitude' => isset($this->ceData['longitude'])
                 ? (float)$this->ceData['longitude']
                 : (
                 isset($this->settings['cbgmLongitude'])
@@ -129,7 +138,7 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
                     : (float)$this->settings['longitude']
                 ),
             // assign map zoom level to the view ,if given value is valid
-            'mapZoom' => null != $this->ceData['zoom']
+            'mapZoom' => isset($this->ceData['zoom'])
                 ? (int)$this->ceData['zoom']
                 : (
                 0 <= (int)$this->settings['cbgmScaleLevel'] && !empty($this->settings['cbgmScaleLevel'])
@@ -137,32 +146,32 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
                     : (int)$this->settings['display']['zoom']
                 ),
             // assign map type to the view, if given value is valid
-            'mapType' => null != $this->ceData['mapType'] && in_array((string)$this->ceData['mapType'],
-                preg_split("/[\s]*[,][\s]*/", $this->settings['valid']['mapTypes']))
+            'mapType' => isset($this->ceData['mapType']) && in_array($this->ceData['mapType'],
+                preg_split("/[\s]*[,][\s]*/", (string) $this->settings['valid']['mapTypes']))
                 ? $this->ceData['mapType']
                 : (
                 in_array((string)$this->settings['cbgmMapType'],
-                    preg_split("/[\s]*[,][\s]*/", $this->settings['valid']['mapTypes']))
+                    preg_split("/[\s]*[,][\s]*/", (string) $this->settings['valid']['mapTypes']))
                     ? $this->settings['cbgmMapType']
                     : $this->settings['display']['mapType']
                 ),
             // assign navigation controls to the view
-            'mapControl' => null != $this->ceData['navigationControl']
+            'mapControl' => isset($this->ceData['navigationControl'])
             && in_array((string)$this->ceData['navigationControl'],
-                preg_split("/[\s]*[,][\s]*/", $this->settings['valid']['navigationControl']))
+                preg_split("/[\s]*[,][\s]*/", (string) $this->settings['valid']['navigationControl']))
                 ? $this->ceData['navigationControl']
                 : (
                 in_array((string)$this->settings['cbgmNavigationControl'],
-                    preg_split("/[\s]*[,][\s]*/", $this->settings['valid']['navigationControl']))
+                    preg_split("/[\s]*[,][\s]*/", (string) $this->settings['valid']['navigationControl']))
                     ? $this->settings['cbgmNavigationControl']
                     : $this->settings['display']['navigationControl']
                 ),
             // assign icon if given by constant or typoscript
-            'icon' => null != $this->ceData['icon'] && file_exists(Environment::getPublicPath() . '/' . $this->ceData['icon'])
-                ? \TYPO3\CMS\Core\Utility\GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->ceData['icon']
+            'icon' => isset($this->ceData['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->ceData['icon'])
+                ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->ceData['icon']
                 : (
                     !empty($this->settings['display']['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->settings['display']['icon'])
-                        ? \TYPO3\CMS\Core\Utility\GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->settings['display']['icon']
+                        ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->settings['display']['icon']
                         : null
                 ),
             // add map styling default
@@ -182,7 +191,7 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
     private function getMapStyling()
     {
 
-        if (null != $this->ceData['mapStyling']
+        if (isset($this->ceData['mapStyling'])
             && file_exists(Environment::getPublicPath() . '/' . $this->ceData['mapStyling'])) {
             // assign map styling from content element
 
@@ -211,14 +220,14 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
      * Add some javascripts and css styles to the view
      * @return void
      */
-    private function addJsCss()
+    private function addJsCss(): void
     {
 
         // add google or openstreet map scripts and styles to the view
         if ('Google' == $this->settings['mapProvider']) {
 
             // build google maps uri
-            $googleMapsUri = preg_match('/^http/', $this->settings['googleapi']['uri'])
+            $googleMapsUri = preg_match('/^http/', (string) $this->settings['googleapi']['uri'])
                 ? $this->settings['googleapi']['uri']
                 : $this->filePath . $this->settings['googleapi']['uri'];
 
@@ -233,11 +242,11 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
 
         } else if ('MapBox' == $this->settings['mapProvider']) {
             // add mapbox js and css files
-            $mapboxJs = preg_match('/^http/', $this->settings['mapboxapi']['js'])
+            $mapboxJs = preg_match('/^http/', (string) $this->settings['mapboxapi']['js'])
                 ? $this->settings['mapboxapi']['js']
                 : $this->filePath . $this->settings['mapboxapi']['js'];
 
-            $mapboxCss = preg_match('/^http/', $this->settings['mapboxapi']['css'])
+            $mapboxCss = preg_match('/^http/', (string) $this->settings['mapboxapi']['css'])
                 ? $this->settings['mapboxapi']['css']
                 : $this->filePath . $this->settings['mapboxapi']['css'];
 
@@ -249,11 +258,11 @@ class MapController extends \TYPO3\CMS\Extbase\Mvc\Controller\ActionController
 
         } else {
             // add leaflet js and css files
-            $osmJs = preg_match('/^http/', $this->settings['osmapi']['js'])
+            $osmJs = preg_match('/^http/', (string) $this->settings['osmapi']['js'])
                 ? $this->settings['osmapi']['js']
                 : $this->filePath . $this->settings['osmapi']['js'];
 
-            $osmCss = preg_match('/^http/', $this->settings['osmapi']['css'])
+            $osmCss = preg_match('/^http/', (string) $this->settings['osmapi']['css'])
                 ? $this->settings['osmapi']['css']
                 : $this->filePath . $this->settings['osmapi']['css'];
 
