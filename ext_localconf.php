@@ -21,7 +21,10 @@ defined('TYPO3') or die();
         ],
 
         // non-cacheable actions
-        []
+        [],
+        // Register the plugin as a dedicated content element (CType). The legacy
+        // "list_type" plugin sub type was removed in TYPO3 v14.
+        \TYPO3\CMS\Extbase\Utility\ExtensionUtility::PLUGIN_TYPE_CONTENT_ELEMENT
     );
 
     $tStamp = (new Datetime("now"))->getTimestamp();

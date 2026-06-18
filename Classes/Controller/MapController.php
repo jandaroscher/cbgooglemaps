@@ -12,6 +12,7 @@ use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
 use Psr\Http\Message\ResponseInterface;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Core\Page\PageRenderer;
 
 /**
  * Class to extend the backend with a tca user field
@@ -222,6 +223,9 @@ class MapController extends ActionController
      */
     private function addJsCss(): void
     {
+        // PageRenderer replaces the removed TSFE->additionalHeaderData (TSFE was
+        // removed in TYPO3 v14). addHeaderData() works in both v13.4 and v14.
+        $pageRenderer = GeneralUtility::makeInstance(PageRenderer::class);
 
         // add google or openstreet map scripts and styles to the view
         if ('Google' == $this->settings['mapProvider']) {
@@ -236,8 +240,9 @@ class MapController extends ActionController
                 $googleMapsUri .= '?key=' . $this->settings['googleapi']['key'];
 
             // add google api file
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemaps'] =
-                '<script src="' . $googleMapsUri . '"></script>';
+            $pageRenderer->addHeaderData(
+                '<script src="' . $googleMapsUri . '"></script>'
+            );
 
 
         } else if ('MapBox' == $this->settings['mapProvider']) {
@@ -250,10 +255,12 @@ class MapController extends ActionController
                 ? $this->settings['mapboxapi']['css']
                 : $this->filePath . $this->settings['mapboxapi']['css'];
 
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsJs'] =
-                '<script src="' . $mapboxJs . '"></script>';
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsCss'] =
-                '<link href="' . $mapboxCss . '" rel="stylesheet" />';
+            $pageRenderer->addHeaderData(
+                '<script src="' . $mapboxJs . '"></script>'
+            );
+            $pageRenderer->addHeaderData(
+                '<link href="' . $mapboxCss . '" rel="stylesheet" />'
+            );
 
 
         } else {
@@ -266,10 +273,12 @@ class MapController extends ActionController
                 ? $this->settings['osmapi']['css']
                 : $this->filePath . $this->settings['osmapi']['css'];
 
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsJs'] =
-                '<script src="' . $osmJs . '"></script>';
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsCss'] =
-                '<link href="' . $osmCss . '" rel="stylesheet" />';
+            $pageRenderer->addHeaderData(
+                '<script src="' . $osmJs . '"></script>'
+            );
+            $pageRenderer->addHeaderData(
+                '<link href="' . $osmCss . '" rel="stylesheet" />'
+            );
 
         }
 
