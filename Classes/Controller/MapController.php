@@ -29,6 +29,7 @@ class MapController extends ActionController
     protected $settings;
     protected $cobj;
     protected $filePath;
+    protected $requestHost;
 
 
     /**
@@ -36,15 +37,15 @@ class MapController extends ActionController
      */
     public function initializeAction(): void
     {
-        // store content element data to local property
-        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
         $configurationManager = GeneralUtility::makeInstance(ConfigurationManager::class);
 
-        // Check if the currentContentObject is available
-        $contentObject = $contentObjectRenderer->data;
-        if (is_array($contentObject) && isset($contentObject['data'])) {
-            $this->ceData = $contentObject['data'];
-        } elseif (is_object($contentObject) && property_exists($contentObject, 'data')) {
+        // Store the current content element data to a local property. The content
+        // object of the plugin instance is exposed as the "currentContentObject"
+        // request attribute since TYPO3 v13; a freshly instantiated
+        // ContentObjectRenderer would carry no record data.
+        $contentObject = $this->request->getAttribute('currentContentObject');
+        if ($contentObject instanceof ContentObjectRenderer) {
+            $this->cobj = $contentObject;
             $this->ceData = $contentObject->data;
         }
 
@@ -54,15 +55,11 @@ class MapController extends ActionController
             'Cbgooglemaps',
             'Quickgooglemap');
 
-        // set sitepath
-        $request = $GLOBALS['TYPO3_REQUEST'];
-        $normalizedParams = $request->getAttribute('normalizedParams');
-        $baseUri = $normalizedParams->getSiteUrl();
-        $this->filePath = $baseUri . '/typo3conf/ext/cbgooglemaps/';
-
-        // set content object renderer
-        $this->cobj = GeneralUtility::makeInstance(
-            ContentObjectRenderer::class);
+        // set sitepath and request host. getRequestHost() replaces the deprecated
+        // GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') (deprecated in v14.3).
+        $normalizedParams = $this->request->getAttribute('normalizedParams');
+        $this->requestHost = $normalizedParams->getRequestHost();
+        $this->filePath = $normalizedParams->getSiteUrl() . '/typo3conf/ext/cbgooglemaps/';
     }
 
 
@@ -92,14 +89,11 @@ class MapController extends ActionController
      */
     private function getMapParameters()
     {
-        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
-        $contentObject = $contentObjectRenderer->data;
-
         return [
-            // assign uid of current content element
-            'contentId' => ((
-                    $this->ceData['uid'] ?? rand(1, 999999)
-                ) . '_' . isset($contentObject->parentRecord['data']['uid'])),
+            // assign uid of current content element (unique per CE; falls back to
+            // a random id when rendered without a tt_content record, e.g. via
+            // TypoScript or a Fluid cObject)
+            'contentId' => $this->ceData['uid'] ?? rand(1, 999999),
             // map provider to build map: googleMaps or OpenStreetMap
             'mapProvider' => $this->settings['mapProvider'],
             // assign width and height of map
@@ -169,10 +163,10 @@ class MapController extends ActionController
                 ),
             // assign icon if given by constant or typoscript
             'icon' => isset($this->ceData['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->ceData['icon'])
-                ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->ceData['icon']
+                ? $this->requestHost . '/' . $this->ceData['icon']
                 : (
                     !empty($this->settings['display']['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->settings['display']['icon'])
-                        ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->settings['display']['icon']
+                        ? $this->requestHost . '/' . $this->settings['display']['icon']
                         : null
                 ),
             // add map styling default
