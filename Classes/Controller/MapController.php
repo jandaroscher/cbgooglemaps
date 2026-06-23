@@ -12,6 +12,7 @@ use TYPO3\CMS\Extbase\Utility\DebuggerUtility;
 use TYPO3\CMS\Frontend\ContentObject\ContentObjectRenderer;
 use Psr\Http\Message\ResponseInterface;
 use TYPO3\CMS\Core\Core\Environment;
+use TYPO3\CMS\Core\Page\PageRenderer;
 
 /**
  * Class to extend the backend with a tca user field
@@ -25,9 +26,12 @@ class MapController extends ActionController
 {
 
     protected $ceData;
-    protected $settings;
+    // Must stay typed `array`: the parent ActionController declares
+    // `protected array $settings`, and TYPO3 v14 fatals on an untyped redeclaration.
+    protected array $settings;
     protected $cobj;
     protected $filePath;
+    protected $requestHost;
 
 
     /**
@@ -35,15 +39,15 @@ class MapController extends ActionController
      */
     public function initializeAction(): void
     {
-        // store content element data to local property
-        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
         $configurationManager = GeneralUtility::makeInstance(ConfigurationManager::class);
 
-        // Check if the currentContentObject is available
-        $contentObject = $contentObjectRenderer->data;
-        if (is_array($contentObject) && isset($contentObject['data'])) {
-            $this->ceData = $contentObject['data'];
-        } elseif (is_object($contentObject) && property_exists($contentObject, 'data')) {
+        // Store the current content element data to a local property. The content
+        // object of the plugin instance is exposed as the "currentContentObject"
+        // request attribute since TYPO3 v13; a freshly instantiated
+        // ContentObjectRenderer would carry no record data.
+        $contentObject = $this->request->getAttribute('currentContentObject');
+        if ($contentObject instanceof ContentObjectRenderer) {
+            $this->cobj = $contentObject;
             $this->ceData = $contentObject->data;
         }
 
@@ -53,15 +57,11 @@ class MapController extends ActionController
             'Cbgooglemaps',
             'Quickgooglemap');
 
-        // set sitepath
-        $request = $GLOBALS['TYPO3_REQUEST'];
-        $normalizedParams = $request->getAttribute('normalizedParams');
-        $baseUri = $normalizedParams->getSiteUrl();
-        $this->filePath = $baseUri . '/typo3conf/ext/cbgooglemaps/';
-
-        // set content object renderer
-        $this->cobj = GeneralUtility::makeInstance(
-            ContentObjectRenderer::class);
+        // set sitepath and request host. getRequestHost() replaces the deprecated
+        // GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') (deprecated in v14.3).
+        $normalizedParams = $this->request->getAttribute('normalizedParams');
+        $this->requestHost = $normalizedParams->getRequestHost();
+        $this->filePath = $normalizedParams->getSiteUrl() . '/typo3conf/ext/cbgooglemaps/';
     }
 
 
@@ -91,14 +91,11 @@ class MapController extends ActionController
      */
     private function getMapParameters()
     {
-        $contentObjectRenderer = GeneralUtility::makeInstance(ContentObjectRenderer::class);
-        $contentObject = $contentObjectRenderer->data;
-
         return [
-            // assign uid of current content element
-            'contentId' => ((
-                    $this->ceData['uid'] ?? rand(1, 999999)
-                ) . '_' . isset($contentObject->parentRecord['data']['uid'])),
+            // assign uid of current content element (unique per CE; falls back to
+            // a random id when rendered without a tt_content record, e.g. via
+            // TypoScript or a Fluid cObject)
+            'contentId' => $this->ceData['uid'] ?? rand(1, 999999),
             // map provider to build map: googleMaps or OpenStreetMap
             'mapProvider' => $this->settings['mapProvider'],
             // assign width and height of map
@@ -168,10 +165,10 @@ class MapController extends ActionController
                 ),
             // assign icon if given by constant or typoscript
             'icon' => isset($this->ceData['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->ceData['icon'])
-                ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->ceData['icon']
+                ? $this->requestHost . '/' . $this->ceData['icon']
                 : (
                     !empty($this->settings['display']['icon']) && file_exists(Environment::getPublicPath() . '/' . $this->settings['display']['icon'])
-                        ? GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST') . '/' . $this->settings['display']['icon']
+                        ? $this->requestHost . '/' . $this->settings['display']['icon']
                         : null
                 ),
             // add map styling default
@@ -222,22 +219,19 @@ class MapController extends ActionController
      */
     private function addJsCss(): void
     {
+        // PageRenderer replaces the removed TSFE->additionalHeaderData (TSFE was
+        // removed in TYPO3 v14). addHeaderData() works in both v13.4 and v14.
+        $pageRenderer = GeneralUtility::makeInstance(PageRenderer::class);
 
         // add google or openstreet map scripts and styles to the view
         if ('Google' == $this->settings['mapProvider']) {
 
-            // build google maps uri
-            $googleMapsUri = preg_match('/^http/', (string) $this->settings['googleapi']['uri'])
-                ? $this->settings['googleapi']['uri']
-                : $this->filePath . $this->settings['googleapi']['uri'];
-
-            // add optional or required given key
-            if (!empty($this->settings['googleapi']['key']))
-                $googleMapsUri .= '?key=' . $this->settings['googleapi']['key'];
-
-            // add google api file
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemaps'] =
-                '<script src="' . $googleMapsUri . '"></script>';
+            // The Google Maps API is a third-party resource and may only be loaded once the
+            // visitor granted consent. Loading therefore happens in the template
+            // (Map/Index.html) after sg-cookie-optin emits "externalContentAccepted" and must
+            // NOT be injected into the page header here – doing so would load Google before
+            // consent (DSGVO violation) and, with the current TypoScript, produced a broken
+            // "<script src=\"https://?key=...\">" tag anyway.
 
 
         } else if ('MapBox' == $this->settings['mapProvider']) {
@@ -250,10 +244,12 @@ class MapController extends ActionController
                 ? $this->settings['mapboxapi']['css']
                 : $this->filePath . $this->settings['mapboxapi']['css'];
 
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsJs'] =
-                '<script src="' . $mapboxJs . '"></script>';
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsCss'] =
-                '<link href="' . $mapboxCss . '" rel="stylesheet" />';
+            $pageRenderer->addHeaderData(
+                '<script src="' . $mapboxJs . '"></script>'
+            );
+            $pageRenderer->addHeaderData(
+                '<link href="' . $mapboxCss . '" rel="stylesheet" />'
+            );
 
 
         } else {
@@ -266,10 +262,12 @@ class MapController extends ActionController
                 ? $this->settings['osmapi']['css']
                 : $this->filePath . $this->settings['osmapi']['css'];
 
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsJs'] =
-                '<script src="' . $osmJs . '"></script>';
-            $GLOBALS['TSFE']->additionalHeaderData['cbgooglemapsCss'] =
-                '<link href="' . $osmCss . '" rel="stylesheet" />';
+            $pageRenderer->addHeaderData(
+                '<script src="' . $osmJs . '"></script>'
+            );
+            $pageRenderer->addHeaderData(
+                '<link href="' . $osmCss . '" rel="stylesheet" />'
+            );
 
         }
 
