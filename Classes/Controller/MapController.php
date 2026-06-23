@@ -224,19 +224,12 @@ class MapController extends ActionController
         // add google or openstreet map scripts and styles to the view
         if ('Google' == $this->settings['mapProvider']) {
 
-            // build google maps uri
-            $googleMapsUri = preg_match('/^http/', (string) $this->settings['googleapi']['uri'])
-                ? $this->settings['googleapi']['uri']
-                : $this->filePath . $this->settings['googleapi']['uri'];
-
-            // add optional or required given key
-            if (!empty($this->settings['googleapi']['key']))
-                $googleMapsUri .= '?key=' . $this->settings['googleapi']['key'];
-
-            // add google api file
-            $pageRenderer->addHeaderData(
-                '<script src="' . $googleMapsUri . '"></script>'
-            );
+            // The Google Maps API is a third-party resource and may only be loaded once the
+            // visitor granted consent. Loading therefore happens in the template
+            // (Map/Index.html) after sg-cookie-optin emits "externalContentAccepted" and must
+            // NOT be injected into the page header here – doing so would load Google before
+            // consent (DSGVO violation) and, with the current TypoScript, produced a broken
+            // "<script src=\"https://?key=...\">" tag anyway.
 
 
         } else if ('MapBox' == $this->settings['mapProvider']) {

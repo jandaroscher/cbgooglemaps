@@ -1,21 +1,44 @@
 <html xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers" data-namespace-typo3-fluid="true">
-<div class="cbQuickGoogleMap">
-    <f:if condition="{width}">
-        <f:then>
-            <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:{width}px; height:{height}px;"></div>
-        </f:then>
-        <f:else>
-            <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:100%; height:{height}px;"></div>
-        </f:else>
-    </f:if>
-</div>
+<f:if condition="{mapProvider} == 'Google'">
+    <f:then>
+        <!-- Wrapped in the sg-cookie-optin external-content protection so the Google
+             Maps API is only requested after the visitor granted consent (DSGVO). -->
+        <div id="cbMapsOptIn" class="frame-external-content-protection" style="width:{width}px; height:{height}px;">
+            <div class="cbQuickGoogleMap">
+                <f:if condition="{width}">
+                    <f:then>
+                        <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:{width}px; height:{height}px;"></div>
+                    </f:then>
+                    <f:else>
+                        <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:100%; height:{height}px;"></div>
+                    </f:else>
+                </f:if>
+            </div>
+        </div>
+    </f:then>
+    <f:else>
+        <div class="cbQuickGoogleMap">
+            <f:if condition="{width}">
+                <f:then>
+                    <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:{width}px; height:{height}px;"></div>
+                </f:then>
+                <f:else>
+                    <div class="inner_cbQuickGoogleMap" id="cbsgm_{contentId}" style="width:100%; height:{height}px;"></div>
+                </f:else>
+            </f:if>
+        </div>
+    </f:else>
+</f:if>
 
 
 
 <f:if condition="{mapProvider} == 'Google'">
 
     <script>
-        window.addEventListener("load", function(event) {braceStart}
+        (function () {braceStart}
+        var mapsApiRequested_{contentId} = false;
+
+        function initGmaps_{contentId}() {braceStart}
 
         var mapType_{contentId} = '{mapType}';
 
@@ -91,7 +114,34 @@
         // assign marker to the map
         marker_{contentId}.setMap(map_{contentId});
 
-        {braceEnd}, false);
+        {braceEnd}
+
+        function loadGoogleMapsApi_{contentId}() {braceStart}
+        // API already present (e.g. the accepted event fired twice) – just (re)init.
+        if (window.google && window.google.maps) {braceStart} initGmaps_{contentId}(); return; {braceEnd}
+        if (mapsApiRequested_{contentId}) {braceStart} return; {braceEnd}
+        mapsApiRequested_{contentId} = true;
+        var googleMapsApiScript_{contentId} = document.createElement('script');
+        googleMapsApiScript_{contentId}.onload = function () {braceStart} initGmaps_{contentId}(); {braceEnd};
+        googleMapsApiScript_{contentId}.src = 'https://maps.googleapis.com/maps/api/js?key={settings.googleapi.key}';
+        document.head.appendChild(googleMapsApiScript_{contentId});
+        {braceEnd}
+
+        // The Google Maps API is third-party content and may only be requested after
+        // the visitor granted consent. sg-cookie-optin (v8+) dispatches a bubbling
+        // "externalContentAccepted" event on the protected element – both when the
+        // visitor accepts the placeholder and on page load when consent was already
+        // granted. Listening on document avoids depending on the deferred
+        // SgCookieOptin global.
+        document.addEventListener('externalContentAccepted', function (event) {braceStart}
+        var accepted = event.detail && event.detail.externalContent;
+        if (!accepted) {braceStart} return; {braceEnd}
+        var isMap = accepted.id === 'cbMapsOptIn'
+        || (accepted.closest && accepted.closest('#cbMapsOptIn'))
+        || (accepted.querySelector && accepted.querySelector('#cbMapsOptIn'));
+        if (isMap) {braceStart} loadGoogleMapsApi_{contentId}(); {braceEnd}
+        {braceEnd});
+        {braceEnd})();
     </script>
 
 </f:if>
