@@ -26,7 +26,9 @@ class MapController extends ActionController
 {
 
     protected $ceData;
-    protected $settings;
+    // Must stay typed `array`: the parent ActionController declares
+    // `protected array $settings`, and TYPO3 v14 fatals on an untyped redeclaration.
+    protected array $settings;
     protected $cobj;
     protected $filePath;
     protected $requestHost;
