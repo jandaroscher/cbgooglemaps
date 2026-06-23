@@ -16,9 +16,12 @@ defined('TYPO3') or die();
         [
             MapController::class => 'index',
         ],
-
         // non-cacheable actions
-        []
+        [],
+        // Register as a content element (CType). list_type plugin sub types were
+        // removed in TYPO3 v14 (#105538); passing this explicitly is the documented
+        // v14 form (omitting it defaults to the same "CType" internally).
+        ExtensionUtility::PLUGIN_TYPE_CONTENT_ELEMENT
     );
 
     $tStamp = (new Datetime("now"))->getTimestamp();
