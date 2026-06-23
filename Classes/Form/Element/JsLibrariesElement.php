@@ -6,7 +6,6 @@ use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Backend\Form\Element\AbstractFormElement;
 use TYPO3\CMS\Extbase\Configuration\ConfigurationManager;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
-use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 
 class JsLibrariesElement extends AbstractFormElement
 {

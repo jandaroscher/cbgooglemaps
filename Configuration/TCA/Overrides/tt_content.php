@@ -1,5 +1,7 @@
 <?php
 
+use TYPO3\CMS\Extbase\Utility\ExtensionUtility;
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 // Prevent script from being called directly
 defined('TYPO3') or die();
 
@@ -12,7 +14,7 @@ defined('TYPO3') or die();
     // plugin as its own content type (CType). The resulting CType identifier is
     // "<extensionkey>_<pluginname>" (lower-cased), i.e. "cbgooglemaps_quickgooglemap",
     // which is the same identifier the extension already used as the former sub type.
-    \TYPO3\CMS\Extbase\Utility\ExtensionUtility::registerPlugin(
+    ExtensionUtility::registerPlugin(
         'cbgooglemaps',
         'Quickgooglemap',
         'LLL:EXT:cbgooglemaps/Resources/Private/Language/locallang.xlf:pluginWizardTitle',
@@ -24,7 +26,7 @@ defined('TYPO3') or die();
     $cType = 'cbgooglemaps_quickgooglemap';
 
     // Add the FlexForm field to the showitem list of the new CType.
-    \TYPO3\CMS\Core\Utility\ExtensionManagementUtility::addToAllTCAtypes(
+    ExtensionManagementUtility::addToAllTCAtypes(
         'tt_content',
         'pi_flexform',
         $cType,

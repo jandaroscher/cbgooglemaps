@@ -19,7 +19,7 @@ class PreviewButtonElement extends AbstractFormElement
                 $settings = $ts['plugin.']['tx_cbgooglemaps.']['settings.'];
                 $i18n = $ts['plugin.']['tx_cbgooglemaps.']['_LOCAL_LANG.'];
                 $iso2 = $GLOBALS['BE_USER']->uc['lang'] . '.';
-                $btnLabels = isset($i18n[$iso2]) ? $i18n[$iso2] : $i18n['default.'];
+                $btnLabels = $i18n[$iso2] ?? $i18n['default.'];
                 $fieldset =  '<div class="cbgm_preview">';
                 $fieldset .= '<input type="button" onclick="cbGooglemaps.displayPreview(\''
                     . $this->data['vanillaUid'].'\',\''
